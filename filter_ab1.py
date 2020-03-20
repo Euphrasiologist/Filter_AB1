@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 
 from Bio import SeqIO
-from collections import defaultdict
-import matplotlib.pyplot as plt
 import argparse
 import os
+import sys
 
 # add arguments
 parser = argparse.ArgumentParser(description="Process an ab1 or abi file or a directory of files.", 
                                  epilog="Thank you for using!")
 parser.add_argument('path', help="Input file(s) path.")
-parser.add_argument('--phred', '-p', type=int, nargs=1, help="Phred quality score cutoff, default 5", default=0)
-parser.add_argument('--replacement', '-r', type=str, nargs=1, help="The replacement letter for nucleotides below quality threshold. Default=N", default="N")
+parser.add_argument('-q', '--phred', type=int, help="Phred quality score cutoff, default 5", default=5)
+parser.add_argument('-r', '--replacement', type=str, help="The replacement letter for nucleotides below quality threshold. Default=N", default="N")
+parser.add_argument('-p', '--proportion', type=float, help="If a sequence has a greater than or equal to this % missing data, sequence will be removed.", default=1)
 args = parser.parse_args()
 
+
+    ######################################
+#                 Housekeeping             #
+    ######################################
+
+phred_score = args.phred
+prop = args.proportion
+replace = args.replacement
+
+if prop is not None:
+    if prop < 0 or prop > 1:
+        sys.exit('Please enter a decimal proportion between zero and one.')
 
     ######################################
 #                 Functions                #
@@ -46,7 +58,7 @@ for ab1 in os.listdir(args.path):
         # which are the bases which are lower than the threshold?
         phred_bool = []
         for phred in record.letter_annotations['phred_quality']:
-            phred_bool.append( phred > args.phred[0] )
+            phred_bool.append(phred > phred_score)
         # create a new list of nucelotides
         # index will tell us which base we are currently on.
         new_seq = []
@@ -55,8 +67,17 @@ for ab1 in os.listdir(args.path):
             if phred_bool[index] == True:
                 new_seq.append(nucleotide)
             else:
-                new_seq.append("N")
+                new_seq.append(replace)
             index += 1
         # turn to string
         new_seq2 = listToString(new_seq)
-        print_fasta(new_seq2, record.name)
+        # calculate proportion missing data
+        length = len(new_seq2)
+        missing = new_seq2.count(replace)
+
+        if missing/length >= prop:
+            continue
+        print_fasta(new_seq2, str(record.name + "_" + str(length)))
+    
+    else:
+        sys.exit("No files detected")
